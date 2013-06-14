@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "util.h"
 
@@ -15,6 +16,7 @@ void key_handler(unsigned char key, int x, int y);
 void mouse_handler(int x, int y);
 int read_shaders(const char *filename);
 
+#define SCREEN_WIDTH 56
 #define MAX_SHADERS 128
 
 /*
@@ -38,6 +40,8 @@ static int shader_count;
 static int current_shader;
 static long shader_activated_time;
 static long next_frame_time;
+static int transition_offset_x;
+static int transition_direction;
 
 static int init_socket(void)
 {
@@ -115,16 +119,28 @@ void idle_func(void) {
 	}
 	glutPostRedisplay();
 
-	/* Check if we should go to the next shader */
-	if(shaders[current_shader].time + shader_activated_time < current_time) {
-		current_shader = (current_shader+1) % shader_count;
-		set_shader(shaders[current_shader].prog);
-		shader_activated_time = current_time;
+	/* Check if we should go to the next shader or if we are transitioning */
+	if(transition_offset_x) {
+		transition_offset_x += transition_direction;
+		if(transition_offset_x >= SCREEN_WIDTH) {
+			/* Old shader is now shifted out. Switch shader and shift it in */
+			current_shader = (current_shader+1) % shader_count;
+			set_shader(shaders[current_shader].prog);
+			shader_activated_time = current_time;
+
+			transition_offset_x = SCREEN_WIDTH;
+			transition_direction = -1;
+		} else if(transition_offset_x <= 0) {
+			transition_direction = 0;
+		}
+	} else if(shaders[current_shader].time + shader_activated_time < current_time) {
+		transition_offset_x = 1;
+		transition_direction = 1;
 	}
 }
 
 void draw(void) {
-	unsigned char pixels[56 * 60 * 3];
+	unsigned char pixels[SCREEN_WIDTH * 60 * 3];
 
 	iGlobalTime = get_msec() / 1000.0f;
 
@@ -143,7 +159,8 @@ void draw(void) {
 
 	glutSwapBuffers();
 
-	glReadPixels(0, 0, 56, 60, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+	memset(pixels, 0, SCREEN_WIDTH*60*3);
+	glReadPixels(transition_offset_x, 0, SCREEN_WIDTH, 60, GL_RGB, GL_UNSIGNED_BYTE, pixels);
 
 	send_packet(pixels, sizeof(pixels));
 }
@@ -173,12 +190,13 @@ int read_shaders(const char *filename) {
 	char line[128];
 	shader_count = 0;
 	current_shader = 0;
+	transition_offset_x = 0;
 
 	if(!fd) {
 		return -1;
 	}
 
-	while(fgets(line, sizeof(line), fd)) {
+	while(shader_count < MAX_SHADERS && fgets(line, sizeof(line), fd)) {
 		float time;
 		char filename[sizeof(line)];
 		if(sscanf(line, "%f %s", &time, filename) == 2) {
