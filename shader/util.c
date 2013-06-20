@@ -9,27 +9,12 @@
 #include <stdlib.h>
 #include <GL/gl.h>
 
-#ifdef __unix__
-GLhandleARB glCreateShaderObjectARB(GLenum);
-void glShaderSourceARB(GLhandleARB, int, const char**, int*);
-void glCompileShaderARB(GLhandleARB);
-GLhandleARB glCreateProgramObjectARB(void);
-void glAttachObjectARB(GLhandleARB, GLhandleARB);
-void glLinkProgramARB(GLhandleARB);
-void glUseProgramObjectARB(GLhandleARB);
-void glGetInfoLogARB(GLhandleARB, GLsizei, GLsizei*, GLcharARB*);
-void glGetObjectParameterivARB(GLhandleARB, GLenum, int*);
-GLint glGetUniformLocationARB(GLhandleARB, const char*);
-void glUniform1f(GLint location, GLfloat v0);
-void glUniform1i(GLint location, GLint v0);
-void glUniform2f(GLint location, GLfloat v0, GLfloat v1);
-#endif
-
-unsigned int setup_shader(const char *fname) {
+static int load_shader(const char *fname, GLenum type) {
 	FILE *fp;
-	unsigned int prog, sdr, len;
+	GLhandleARB sdr;
+	unsigned int len;
 	char *src_buf;
-	int success, linked;
+	int success;
 
 	if(!(fp = fopen(fname, "r"))) {
 		fprintf(stderr, "failed to open shader: %s\n", fname);
@@ -43,7 +28,7 @@ unsigned int setup_shader(const char *fname) {
 	fread(src_buf, 1, len, fp);
 	src_buf[len] = 0;
 
-	sdr = glCreateShaderObjectARB(GL_FRAGMENT_SHADER_ARB);
+	sdr = glCreateShaderObjectARB(type);
 	glShaderSourceARB(sdr, 1, (const char**)&src_buf, 0);
 	free(src_buf);
 
@@ -68,8 +53,50 @@ unsigned int setup_shader(const char *fname) {
 		return 0;
 	}
 
+	return sdr;
+}
+
+unsigned int setup_shader(const char *fname) {
+	unsigned int prog, sdr;
+	int linked;
+
+	sdr = load_shader(fname, GL_FRAGMENT_SHADER_ARB);
+	if(!sdr) {
+		fprintf(stderr, "shader loading failed\n");
+		return 0;
+	}
+
 	prog = glCreateProgramObjectARB();
 	glAttachObjectARB(prog, sdr);
+	glLinkProgramARB(prog);
+	glGetObjectParameterivARB(prog, GL_OBJECT_LINK_STATUS_ARB, &linked);
+	if(!linked) {
+		fprintf(stderr, "shader linking failed\n");
+		return 0;
+	}
+
+	return prog;
+}
+
+unsigned int setup_shader_vertex(const char *fname_frag, const char *fname_vertex) {
+	unsigned int prog, sdr_frag, sdr_vertex;
+	int linked;
+
+	sdr_frag = load_shader(fname_frag, GL_FRAGMENT_SHADER_ARB);
+	if(!sdr_frag) {
+		fprintf(stderr, "shader loading failed\n");
+		return 0;
+	}
+
+	sdr_vertex = load_shader(fname_vertex, GL_VERTEX_SHADER_ARB);
+	if(!sdr_vertex) {
+		fprintf(stderr, "shader loading failed\n");
+		return 0;
+	}
+
+	prog = glCreateProgramObjectARB();
+	glAttachObjectARB(prog, sdr_frag);
+	glAttachObjectARB(prog, sdr_vertex);
 	glLinkProgramARB(prog);
 	glGetObjectParameterivARB(prog, GL_OBJECT_LINK_STATUS_ARB, &linked);
 	if(!linked) {

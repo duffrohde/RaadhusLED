@@ -1,7 +1,7 @@
-obj = util.o
+obj = util.o osaa.o
 
 CC = gcc
-CFLAGS = -pedantic -Wall -O1
+CFLAGS = -pedantic -Wall -DGL_GLEXT_PROTOTYPES
 LDFLAGS = -lGL -lGLU -lglut
 
 .PHONY: all

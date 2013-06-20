@@ -5,6 +5,7 @@ unsigned long get_msec(void);
 
 void set_shader(unsigned int prog);
 unsigned int setup_shader(const char *fname);
+unsigned int setup_shader_vertex(const char *fname_frag, const char *fname_vertex);
 void set_uniform1f(unsigned int prog, const char *name, float val);
 void set_uniform2f(unsigned int prog, const char *name, float v1, float v2);
 void set_uniform1i(unsigned int prog, const char *name, int val);

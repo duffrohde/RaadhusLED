@@ -10,6 +10,8 @@
 #include <unistd.h>
 #include "util.h"
 
+void init_osaa(void);
+void draw_osaa(void);
 void idle_func(void);
 void draw(void);
 void key_handler(unsigned char key, int x, int y);
@@ -32,10 +34,14 @@ int read_shaders(const char *filename);
 float iGlobalTime;
 static int sockd;
 
+enum e_shader_type { REAL_SHADER, GL_CODE };
+
 static struct {
 	float time;
 	unsigned int prog;
+	enum e_shader_type type;
 } shaders[MAX_SHADERS];
+
 static int shader_count;
 static int current_shader;
 static long shader_activated_time;
@@ -102,6 +108,12 @@ int main(int argc, char **argv) {
 	set_shader(shaders[current_shader].prog);
 	shader_activated_time = get_msec();
 
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	glEnable(GL_DEPTH_TEST);
+
+	init_osaa();
+
 	glutMainLoop();
 	return 0;
 }
@@ -141,10 +153,43 @@ void idle_func(void) {
 
 void draw(void) {
 	unsigned char pixels[SCREEN_WIDTH * 60 * 3];
+	unsigned int prog = shaders[current_shader].prog;
 
 	iGlobalTime = get_msec() / 1000.0f;
 
-	set_uniform1f(shaders[current_shader].prog, "iGlobalTime", iGlobalTime);
+	switch(shaders[current_shader].type) {
+	case GL_CODE:
+		switch(prog) {
+		case 1:
+			draw_osaa();
+			break;
+		}
+		break;
+	case REAL_SHADER:
+		set_shader(prog);
+
+		set_uniform1f(prog, "iGlobalTime", iGlobalTime);
+
+		glDisable(GL_BLEND);
+		
+		glBegin(GL_QUADS);
+		glTexCoord2f(0, 0);
+		glVertex2f(-1, -1);
+		glTexCoord2f(1, 0);
+		glVertex2f(1, -1);
+		glTexCoord2f(1, 1);
+		glVertex2f(1, 1);
+		glTexCoord2f(0, 1);
+		glVertex2f(-1, 1);
+		glEnd();
+		
+		break;
+	}
+
+	set_shader(0);
+	glEnable(GL_BLEND);
+
+	glColor4f(0.0f, 0.0f, 0.0f, transition_offset_x / (float)SCREEN_WIDTH);
 
 	glBegin(GL_QUADS);
 	glTexCoord2f(0, 0);
@@ -160,7 +205,7 @@ void draw(void) {
 	glutSwapBuffers();
 
 	memset(pixels, 0, SCREEN_WIDTH*60*3);
-	glReadPixels(transition_offset_x, 0, SCREEN_WIDTH, 60, GL_RGB, GL_UNSIGNED_BYTE, pixels);
+	glReadPixels(0, 0, SCREEN_WIDTH, 60, GL_RGB, GL_UNSIGNED_BYTE, pixels);
 
 	send_packet(pixels, sizeof(pixels));
 }
@@ -201,12 +246,18 @@ int read_shaders(const char *filename) {
 		char filename[sizeof(line)];
 		if(sscanf(line, "%f %s", &time, filename) == 2) {
 			unsigned int prog;
-			if(!(prog = setup_shader(filename))) {
+			enum e_shader_type type = REAL_SHADER;
+			if(filename[0] == '/') {
+				/* Special hack to address some internal GL routines */
+				prog = atoi(filename+1);
+				type = GL_CODE;
+			} else if(!(prog = setup_shader(filename))) {
 				ret = -1;
 				break;
 			}
 			shaders[shader_count].time = time;
 			shaders[shader_count].prog = prog;
+			shaders[shader_count].type = type;
 			shader_count++;
 		}
 	}
