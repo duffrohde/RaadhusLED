@@ -157,6 +157,8 @@ void draw(void) {
 
 	iGlobalTime = get_msec() / 1000.0f;
 
+	glDisable(GL_BLEND);		
+
 	switch(shaders[current_shader].type) {
 	case GL_CODE:
 		switch(prog) {
@@ -170,8 +172,6 @@ void draw(void) {
 
 		set_uniform1f(prog, "iGlobalTime", iGlobalTime);
 
-		glDisable(GL_BLEND);
-		
 		glBegin(GL_QUADS);
 		glTexCoord2f(0, 0);
 		glVertex2f(-1, -1);
